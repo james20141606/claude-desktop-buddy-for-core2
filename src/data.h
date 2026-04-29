@@ -78,11 +78,15 @@ static void _applyJson(const char* line, TamaState* out) {
   if (!t.isNull() && t.size() == 2) {
     time_t local = (time_t)t[0].as<uint32_t>() + (int32_t)t[1];
     struct tm lt; gmtime_r(&local, &lt);
-    RTC_TimeTypeDef tm = { (uint8_t)lt.tm_hour, (uint8_t)lt.tm_min, (uint8_t)lt.tm_sec };
-    RTC_DateTypeDef dt = { (uint8_t)lt.tm_wday, (uint8_t)(lt.tm_mon + 1),
-                           (uint8_t)lt.tm_mday, (uint16_t)(lt.tm_year + 1900) };
-    M5.Rtc.SetTime(&tm);
-    M5.Rtc.SetDate(&dt);
+    m5::rtc_datetime_t dt;
+    dt.time.hours   = (uint8_t)lt.tm_hour;
+    dt.time.minutes = (uint8_t)lt.tm_min;
+    dt.time.seconds = (uint8_t)lt.tm_sec;
+    dt.date.weekDay = (uint8_t)lt.tm_wday;
+    dt.date.month   = (uint8_t)(lt.tm_mon + 1);
+    dt.date.date    = (uint8_t)lt.tm_mday;
+    dt.date.year    = (uint16_t)(lt.tm_year + 1900);
+    M5.Rtc.setDateTime(&dt);
     extern uint32_t _clkLastRead;
     _clkLastRead = 0;   // force re-read so _clkDt and _rtcValid agree
     _rtcValid = true;
@@ -178,7 +182,7 @@ inline void dataPoll(TamaState* out) {
   if (!out->connected) {
     out->sessionsTotal=0; out->sessionsRunning=0; out->sessionsWaiting=0;
     out->recentlyCompleted=false; out->lastUpdated=now;
-    strncpy(out->msg, "No Claude connected", sizeof(out->msg)-1);
+    strncpy(out->msg, "No Claude", sizeof(out->msg)-1);
     out->msg[sizeof(out->msg)-1]=0;
   }
 }

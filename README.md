@@ -1,4 +1,25 @@
-# claude-desktop-buddy
+# claude-desktop-buddy-for-core2
+
+> **Core2 port** — this fork rewrites the firmware to run on the
+> **M5Stack Core2** (320×240 capacitive-touch ESP32 dev kit) instead of
+> the original M5StickC Plus. Same wire protocol, same desktop app
+> integration, bigger screen, touch buttons. See the upstream repo at
+> [anthropics/claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy)
+> for the original StickC Plus version.
+>
+> What changed for Core2:
+> - Library swapped: `M5StickCPlus` → `M5Unified`
+> - Display: 135×240 → 240×320 portrait
+> - Buttons: physical A/B/Power → BtnA/BtnB/BtnC capacitive + BtnPWR
+> - Power chip calls (`M5.Axp.*`) → `M5.Power` + `M5.Display`
+> - Beep → `M5.Speaker.tone`
+> - RTC structs → `m5::rtc_datetime_t`
+> - Temperature now reads from MPU6886 IMU on-die sensor
+> - LittleFS auto-formats on first boot
+> - Pet ASCII art at scale 3, larger fonts in HUD/approval/clock
+> - Defaults: owner "James", pet "Luna", species "cat"
+
+---
 
 Claude for macOS and Windows can connect Claude Cowork and Claude Code to
 maker devices over BLE, so developers and makers can build hardware that
@@ -22,10 +43,9 @@ waiting, and lets you approve or deny right from the device.
 
 ## Hardware
 
-The firmware targets ESP32 with the Arduino framework. As written, it
-depends on the M5StickCPlus library for its display, IMU, and button
-drivers—so you'll need that board, or a fork that swaps those drivers for
-your own pin layout.
+The firmware targets the **M5Stack Core2** (ESP32, 320×240 capacitive
+touch screen, AXP192 power management, MPU6886 IMU, BM8563 RTC). For the
+original M5StickC Plus version see the upstream repository linked above.
 
 ## Flashing
 
