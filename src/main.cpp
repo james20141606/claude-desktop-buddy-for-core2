@@ -1,6 +1,7 @@
 #include <M5Unified.h>
 #include <LittleFS.h>
 #include <stdarg.h>
+#include "board_config.h"
 #include "ble_bridge.h"
 #include "data.h"
 #include "buddy.h"
@@ -20,10 +21,10 @@ static void startBt() {
 
 #include "character.h"
 #include "stats.h"
-const int W = 240, H = 320;       // Core2 portrait (rotation 0)
+const int W = SCREEN_W;
+const int H = SCREEN_H;
 const int CX = W / 2;
 const int CY_BASE = H / 2;
-// Core2 has no GPIO LED; use AXP-controlled side LED via M5.Power.setLed()
 
 // Colors used across multiple UI surfaces
 const uint16_t HOT   = 0xFA20;   // red-orange: warnings, impatience, deny
@@ -563,22 +564,14 @@ void drawPasskey() {
 
 void drawInfo() {
   const Palette& p = characterPalette();
-  const int TOP = 50;
+  const int TOP = INFO_TOP;
   spr.fillRect(0, TOP, W, H - TOP, p.bg);
   int y = TOP + 2;
-  // ln() prints body lines at size 2 (12×16 glyphs). y advances by 18 per
-  // line — tight enough to fit ~14 body lines on the 320-tall screen.
+  // Body lines at INFO_BODY_SZ; line height per board config.
   auto ln = [&](const char* fmt, ...) {
     char b[40]; va_list a; va_start(a, fmt); vsnprintf(b, sizeof(b), fmt, a); va_end(a);
-    spr.setTextSize(2);
-    spr.setCursor(4, y); spr.print(b); y += 18;
-  };
-  // lns() prints a "small" secondary line at size 1 (6×8) for tertiary
-  // info that wouldn't fit at size 2. Used sparingly.
-  auto lns = [&](const char* fmt, ...) {
-    char b[40]; va_list a; va_start(a, fmt); vsnprintf(b, sizeof(b), fmt, a); va_end(a);
-    spr.setTextSize(1);
-    spr.setCursor(4, y); spr.print(b); y += 10;
+    spr.setTextSize(INFO_BODY_SZ);
+    spr.setCursor(4, y); spr.print(b); y += INFO_LINE_H;
   };
 
   if (infoPage == 0) {
@@ -645,14 +638,14 @@ void drawInfo() {
     bool full = usb && vBat_mV > 4100 && iBat_mA < 10;
 
     spr.setTextColor(p.text, p.bg);
-    spr.setTextSize(3);
+    spr.setTextSize(INFO_BAT_PCT_SZ);
     spr.setCursor(4, y);
     spr.printf("%d%%", pct);
-    spr.setTextSize(2);
+    spr.setTextSize(INFO_BODY_SZ + 1);
     spr.setTextColor(full ? GREEN : (charging ? HOT : p.textDim), p.bg);
-    spr.setCursor(96, y + 6);
+    spr.setCursor(4 + 24 * INFO_BAT_PCT_SZ + 4, y + 6);
     spr.print(full ? "full" : (charging ? "charging" : (usb ? "usb" : "battery")));
-    y += 32;
+    y += 8 * INFO_BAT_PCT_SZ + 4;
 
     spr.setTextColor(p.textDim, p.bg);
     ln("  battery  %d.%02dV", vBat_mV/1000, (vBat_mV%1000)/10);
@@ -839,7 +832,7 @@ static void tinyHeart(int x, int y, bool filled, uint16_t col) {
 }
 
 static void drawPetStats(const Palette& p) {
-  const int TOP = 70;
+  const int TOP = PET_TOP;
   spr.fillRect(0, TOP, W, H - TOP, p.bg);
   spr.setTextSize(1);
   int y = TOP + 16;
@@ -875,13 +868,15 @@ static void drawPetStats(const Palette& p) {
   spr.setCursor(11, y + 1); spr.printf("Lv %u", stats().level);
 
   y += 20;
+  spr.setTextSize(PET_STAT_BODY_SZ);
   spr.setTextColor(p.textDim, p.bg);
+  const int LH = PET_STAT_LINE_H;
   spr.setCursor(6, y);
   spr.printf("approved %u", stats().approvals);
-  spr.setCursor(6, y + 10);
+  spr.setCursor(6, y + LH);
   spr.printf("denied   %u", stats().denials);
   uint32_t nap = stats().napSeconds;
-  spr.setCursor(6, y + 20);
+  spr.setCursor(6, y + 2*LH);
   spr.printf("napped   %luh%02lum", nap/3600, (nap/60)%60);
   auto tokFmt = [&](const char* label, uint32_t v, int yPx) {
     spr.setCursor(6, yPx);
@@ -889,8 +884,9 @@ static void drawPetStats(const Palette& p) {
     else if (v >= 1000) spr.printf("%s%lu.%luK", label, v/1000, (v/100)%10);
     else                spr.printf("%s%lu", label, v);
   };
-  tokFmt("tokens   ", stats().tokens, y + 30);
-  tokFmt("today    ", tama.tokensToday, y + 40);
+  tokFmt("tokens   ", stats().tokens, y + 3*LH);
+  tokFmt("today    ", tama.tokensToday, y + 4*LH);
+  spr.setTextSize(1);
 }
 
 static void drawPetHowTo(const Palette& p) {
@@ -926,13 +922,13 @@ static void drawPetHowTo(const Palette& p) {
 
 void drawPet() {
   const Palette& p = characterPalette();
-  int y = 70;
+  int y = PET_TOP;
 
   if (petPage == 0) drawPetStats(p);
   else drawPetHowTo(p);
 
   // Header on top of whichever page drew — title left, counter right
-  spr.setTextSize(1);
+  spr.setTextSize(PET_HEADER_SZ);
   spr.setTextColor(p.text, p.bg);
   spr.setCursor(4, y + 2);
   if (ownerName()[0]) {
@@ -946,8 +942,11 @@ void drawPet() {
     spr.print(petName());
   }
   spr.setTextColor(p.textDim, p.bg);
-  spr.setCursor(W - 28, y + 2);
+  // Right-align the page counter to fit at either text size.
+  int ctrW = (PET_HEADER_SZ == 2) ? 36 : 28;
+  spr.setCursor(W - ctrW, y + 2);
   spr.printf("%u/%u", petPage + 1, PET_PAGES);
+  spr.setTextSize(1);
 }
 
 void drawHUD() {

@@ -1,5 +1,6 @@
 #include "buddy.h"
 #include "buddy_common.h"
+#include "board_config.h"
 #include <M5Unified.h>
 #include <string.h>
 
@@ -9,9 +10,9 @@ extern M5Canvas spr;
 enum { B_SLEEP, B_IDLE, B_BUSY, B_ATTENTION, B_CELEBRATE, B_DIZZY, B_HEART };
 
 // ──────────────── shared geometry ────────────────
-const int BUDDY_X_CENTER = 120;
-const int BUDDY_CANVAS_W = 240;
-const int BUDDY_Y_BASE   = 12;     // shifted up from 30 to fill the upper screen
+const int BUDDY_X_CENTER = BUDDY_X_CENTER_VAL;
+const int BUDDY_CANVAS_W = BUDDY_CANVAS_W_VAL;
+const int BUDDY_Y_BASE   = BUDDY_BASE_Y;
 const int BUDDY_Y_OVERLAY = 6;
 const int BUDDY_CHAR_W   = 6;
 const int BUDDY_CHAR_H   = 8;
@@ -148,7 +149,7 @@ static uint8_t lastDrawnSpecies = 0xFF;
 void buddyInvalidate() { lastDrawnState = 0xFF; }
 
 void buddySetPeek(bool peek) {
-  uint8_t s = peek ? 1 : 3;
+  uint8_t s = peek ? BUDDY_SCALE_PEEK : BUDDY_SCALE_NORMAL;
   if (s == _scale) return;
   _scale = s;
   buddyInvalidate();
