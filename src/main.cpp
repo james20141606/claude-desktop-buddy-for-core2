@@ -1141,32 +1141,39 @@ void loop() {
   dataPoll(&tama);
   if (statsPollLevelUp()) triggerOneShot(P_CELEBRATE, 3000);
 
-  // recentlyCompleted = "Claude finished a turn".
-  // We deliberately don't gate on rising-edge here: the bridge's heartbeat
-  // resets the field every 15s by sending JSON without a "completed" key,
-  // but a user can finish two turns within 15s (rapid back-and-forth)
-  // and we want each one to chirp. Use a 2.5s cooldown by tracking the
-  // millis of the last fire instead.
-  static uint32_t lastCompletionFireMs = 0;
-  static uint16_t lastMsgHash = 0;
-  // Cheap msg hash — XOR of bytes — so identical re-pushes within the
-  // cooldown window are still treated as one event but a new msg chirps.
+  // recentlyCompleted = "Claude finished a turn". Fire chirp + banner
+  // exactly once per discrete event. An event is either:
+  //   (a) rising edge: recentlyCompleted went false→true (heartbeat
+  //       resets to false every 15s, so most pushes are rising edges)
+  //   (b) msg changed: a fresh completion arrives back-to-back inside a
+  //       15s window — same recentlyCompleted=true but new headline
+  // A 1s cooldown swallows duplicate writes from the same physical
+  // event. We do NOT fire just because cooldown elapsed — that was the
+  // earlier bug where the banner kept refreshing forever while
+  // recentlyCompleted stayed true between heartbeats.
+  static bool     _lastCompleted = false;
+  static uint16_t _lastFiredHash = 0xFFFF;
+  static uint32_t _lastFireMs = 0;
   uint16_t msgHash = 0;
   for (const char* p = tama.msg; *p; p++) msgHash = (msgHash * 31) ^ (uint8_t)*p;
-  bool sameMsgRecent = (msgHash == lastMsgHash)
-                    && (millis() - lastCompletionFireMs < 2500);
-  if (tama.recentlyCompleted && !sameMsgRecent) {
-    wake();
-    beep(2400, 60);
-    delay(80);
-    beep(3200, 80);
-    triggerOneShot(P_CELEBRATE, 3000);
-    strncpy(completionBannerMsg, tama.msg, sizeof(completionBannerMsg) - 1);
-    completionBannerMsg[sizeof(completionBannerMsg) - 1] = 0;
-    completionBannerUntil = millis() + 3000;
-    lastCompletionFireMs = millis();
-    lastMsgHash = msgHash;
+  if (tama.recentlyCompleted) {
+    bool risingEdge = !_lastCompleted;
+    bool msgChanged = msgHash != _lastFiredHash;
+    bool inCooldown = (millis() - _lastFireMs) < 1000;
+    if ((risingEdge || msgChanged) && !inCooldown) {
+      wake();
+      beep(2400, 60);
+      delay(80);
+      beep(3200, 80);
+      triggerOneShot(P_CELEBRATE, 3000);
+      strncpy(completionBannerMsg, tama.msg, sizeof(completionBannerMsg) - 1);
+      completionBannerMsg[sizeof(completionBannerMsg) - 1] = 0;
+      completionBannerUntil = millis() + 3000;
+      _lastFiredHash = msgHash;
+      _lastFireMs = millis();
+    }
   }
+  _lastCompleted = tama.recentlyCompleted;
 
   baseState = derive(tama);
 
