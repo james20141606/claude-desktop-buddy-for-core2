@@ -60,6 +60,29 @@ def tally(path: str, today_str: str) -> tuple[int, int, int, int]:
     return sess_out, today_out, all_out, n
 
 
+def fmt_tokens(n: int) -> str:
+    """Human-readable token count: 1234 -> '1.2K', 1500000 -> '1.5M'."""
+    if n >= 1_000_000:
+        return f"{n/1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n/1_000:.1f}K"
+    return str(n)
+
+
+def project_label(cwd: str) -> str:
+    """Short identifier for the project the assistant just finished a turn
+    in.  basename of cwd, falling back to home shorthand."""
+    if not cwd:
+        return "?"
+    name = os.path.basename(cwd.rstrip("/"))
+    if not name:
+        # cwd was '/' or similar
+        return "/"
+    if name == os.path.basename(os.path.expanduser("~")):
+        return "~"
+    return name
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -90,15 +113,21 @@ def main():
     except Exception:
         pass
 
-    # Short status line. Buddy's data.h truncates msg to 23 chars.
-    msg = f"{sess_n}msg {sess_out//1000 if sess_out >= 1000 else sess_out}{'K' if sess_out >= 1000 else ''}tk"[:23]
+    # Headline: which project just finished + how many tokens this turn.
+    # data.h caps msg at 23 chars; project name truncated to fit.
+    proj = project_label(event.get("cwd", ""))[:14]
+    tok = fmt_tokens(sess_out)
+    msg = f"done {proj} {tok}"[:23]
 
     body = {
         "tokens_today": today_out_all,
         "tokens_total": all_out_all,    # display-only on PET stats line
         "msg":          msg,
-        "running":      0,        # turn just ended
-        "completed":    True,     # triggers the celebrate animation
+        "entries":      [],             # force HUD into placeholder branch
+                                        # so the headline msg is the big
+                                        # auto-fit text on screen
+        "running":      0,              # turn just ended
+        "completed":    True,           # triggers the celebrate animation
     }
 
     try:
