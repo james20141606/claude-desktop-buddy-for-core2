@@ -39,6 +39,47 @@ bridge_http_alive() { /usr/bin/curl -s --max-time 3 -o /dev/null -w '%{http_code
 ble_connected()     { bridge_status | /usr/bin/grep -q '"connected": true'; }
 hook_wired()        { /usr/bin/grep -q "buddy_hook.py" "$HOME/.claude/settings.json" 2>/dev/null; }
 
+# Optional remote sync — only runs when an existing SSH ControlMaster
+# socket is active for the candy host (i.e. the user did `ssh candy`
+# interactively in the last ControlPersist window, ~10 min).  Avoids
+# auth failures when launchd's headless context can't reach Kerberos.
+REMOTE_HOST="${BUDDY_REMOTE_HOST:-candy}"
+ssh_master_alive() { /usr/bin/ssh -O check "$REMOTE_HOST" 2>/dev/null; }
+remote_hash() {
+  /usr/bin/ssh "$REMOTE_HOST" \
+    "shasum -a 256 ~/state_hook.py 2>/dev/null || sha256sum ~/state_hook.py 2>/dev/null" \
+    2>/dev/null | /usr/bin/awk '{print $1}'
+}
+local_hash() {
+  /usr/bin/shasum -a 256 "$HERE/state_hook.py" | /usr/bin/awk '{print $1}'
+}
+
+sync_remote_if_drifted() {
+  if ! ssh_master_alive; then
+    log "  remote sync skipped — no SSH master to $REMOTE_HOST"
+    return 1
+  fi
+  local rh lh
+  rh=$(remote_hash)
+  lh=$(local_hash)
+  if [ -z "$rh" ]; then
+    log "  remote sync skipped — couldn't read remote state_hook hash"
+    return 1
+  fi
+  if [ "$rh" = "$lh" ]; then
+    log "  remote state_hook in sync ($lh)"
+    return 0
+  fi
+  log "  remote state_hook DRIFT — local=$lh remote=$rh, redeploying"
+  if "$HERE/deploy-remote.sh" "$REMOTE_HOST" >> "$LOG" 2>&1; then
+    log "  remote deploy succeeded"
+    return 0
+  else
+    log "  remote deploy FAILED"
+    return 1
+  fi
+}
+
 # ── Remediation primitives ──────────────────────────────────────────────
 
 heal_bridge_via_launchd() {
@@ -80,6 +121,10 @@ else:
     print("already present")
 PY
 }
+
+# ── Remote sync (best-effort, runs first so subsequent local checks
+#    don't trip on a remote-only condition)
+sync_remote_if_drifted || true
 
 # ── Pass 1: detect ──────────────────────────────────────────────────────
 problems=()
