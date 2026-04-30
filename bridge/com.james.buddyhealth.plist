@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Periodic health check — every 4 hours, runs health-watch.sh.
+
+  Install:
+    cp bridge/com.james.buddyhealth.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.james.buddyhealth.plist
+
+  Verify it's scheduled:
+    launchctl list | grep buddyhealth
+
+  Force-fire it (for testing):
+    launchctl start com.james.buddyhealth
+
+  Logs:
+    tail -f /tmp/buddyhealth.log              (per-check summaries)
+    tail -f /tmp/buddyhealth.{out,err}        (script stdout/stderr)
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.james.buddyhealth</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/bytedance/buddy/bridge/health-watch.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/bytedance/buddy/bridge</string>
+
+  <!-- Run at load (once on login) plus every 4h = 14400s -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>14400</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/buddyhealth.out</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/buddyhealth.err</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

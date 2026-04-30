@@ -1133,6 +1133,20 @@ void loop() {
 
   dataPoll(&tama);
   if (statsPollLevelUp()) triggerOneShot(P_CELEBRATE, 3000);
+
+  // Rising edge of recentlyCompleted = "Claude finished a turn" notification.
+  // Wake the screen and chirp so the user notices even if they tabbed away —
+  // critical when bypass mode means there's no in-terminal prompt to stop on.
+  static bool _lastCompleted = false;
+  if (tama.recentlyCompleted && !_lastCompleted) {
+    wake();
+    beep(2400, 60);
+    delay(80);
+    beep(3200, 80);   // two-note up-chirp, clearly distinct from approval beep
+    triggerOneShot(P_CELEBRATE, 3000);
+  }
+  _lastCompleted = tama.recentlyCompleted;
+
   baseState = derive(tama);
 
   // After waking the screen, hold sleep for 12s so users see the wake-up
