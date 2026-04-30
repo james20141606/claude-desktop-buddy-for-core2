@@ -88,8 +88,19 @@ class Bridge:
                     await client.start_notify(NUS_TX_CHAR, self._on_notify)
                     log.info("connected, subscribed to TX notifications")
                     self.connected.set()
-                    # Hello-ping so the device's "linked" state lights up
-                    await self._send_raw({"msg": "buddy-bridge"})
+                    # Hello-ping so the device's "linked" state lights up.
+                    # "Ready" reads cleaner than "buddy-bridge" if no
+                    # state hook ever overrides it.  state_hook.py /
+                    # /state HTTP can replace it any time.
+                    import time as _t
+                    _epoch = int(_t.time())
+                    _tz = -_t.timezone if not _t.daylight else -_t.altzone
+                    await self._send_raw({
+                        "msg": "Ready",
+                        "running": 0,
+                        "waiting": 0,
+                        "time": [_epoch, _tz],
+                    })
                     while client.is_connected:
                         await asyncio.sleep(1)
                     log.info("BLE disconnected, will reconnect")
