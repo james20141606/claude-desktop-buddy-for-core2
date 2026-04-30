@@ -9,8 +9,9 @@ set -e
 HOST="${1:-candy}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-echo ">> copying buddy_hook.py to $HOST:~/buddy_hook.py"
+echo ">> copying buddy_hook.py + state_hook.py to $HOST:~/"
 scp -q "$HERE/buddy_hook.py" "$HOST:buddy_hook.py"
+scp -q "$HERE/state_hook.py" "$HOST:state_hook.py"
 
 echo ">> updating ~/.claude/settings.json on $HOST"
 ssh "$HOST" python3 - <<'PYEOF'
@@ -19,25 +20,39 @@ p = pathlib.Path.home() / ".claude" / "settings.json"
 p.parent.mkdir(exist_ok=True)
 s = json.loads(p.read_text()) if p.exists() else {}
 hooks = s.setdefault("hooks", {})
-existing = hooks.get("PreToolUse", [])
-already = any(
-    "buddy_hook.py" in h.get("command", "")
-    for entry in existing
-    for h in entry.get("hooks", [])
-)
-if not already:
-    existing.append({
+home = pathlib.Path.home()
+
+# PreToolUse — gates risky tools through the buddy device (gate is no-op
+# in bypass / plan / acceptEdits modes per the hook's own logic)
+pre = hooks.setdefault("PreToolUse", [])
+if not any("buddy_hook.py" in h.get("command", "")
+           for e in pre for h in e.get("hooks", [])):
+    pre.append({
         "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|WebFetch",
         "hooks": [{
             "type": "command",
-            "command": "python3 " + str(pathlib.Path.home() / "buddy_hook.py"),
+            "command": f"python3 {home / 'buddy_hook.py'}",
         }],
     })
-    hooks["PreToolUse"] = existing
-    p.write_text(json.dumps(s, indent=2))
-    print("merged buddy hook into", p)
-else:
-    print("buddy hook already present at", p)
+    print("added PreToolUse hook")
+
+# Stop — fires after every assistant turn regardless of mode; pushes
+# tokens and a "done <session> <Ntk>" headline that wakes the device
+# back home so the user knows this remote session just finished.
+stop = hooks.setdefault("Stop", [])
+if not any("state_hook.py" in h.get("command", "")
+           for e in stop for h in e.get("hooks", [])):
+    stop.append({
+        "matcher": "",
+        "hooks": [{
+            "type": "command",
+            "command": f"python3 {home / 'state_hook.py'}",
+        }],
+    })
+    print("added Stop hook")
+
+p.write_text(json.dumps(s, indent=2))
+print("settings written to", p)
 PYEOF
 
 echo ">> done. test:   ssh $HOST 'cat ~/.claude/settings.json'"

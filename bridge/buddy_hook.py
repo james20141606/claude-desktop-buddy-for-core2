@@ -122,12 +122,17 @@ def main():
                 or event.get("mode")
                 or "")
         tool_name = event.get("tool_name") or event.get("tool") or ""
-        if mode in ("bypassPermissions", "bypass", "plan"):
-            sys.exit(0)
-        if mode == "acceptEdits" and tool_name in (
-            "Edit", "Write", "MultiEdit", "NotebookEdit"
-        ):
-            sys.exit(0)
+        if mode in ("bypassPermissions", "bypass", "plan", "acceptEdits"):
+            # acceptEdits ("auto") added per user intent: when they've
+            # opted into auto-mode they want hands-off, including for
+            # Bash. Set BUDDY_GATE_BASH_IN_AUTO=1 to revert to the
+            # safer "auto = edits only" semantics for Bash/WebFetch.
+            if mode == "acceptEdits" and os.environ.get(
+                "BUDDY_GATE_BASH_IN_AUTO"
+            ) == "1" and tool_name in ("Bash", "WebFetch"):
+                pass  # fall through to buddy gate
+            else:
+                sys.exit(0)
 
     tool = event.get("tool_name") or event.get("tool") or "tool"
     tool_input = event.get("tool_input") or {}

@@ -76,11 +76,56 @@ def project_label(cwd: str) -> str:
         return "?"
     name = os.path.basename(cwd.rstrip("/"))
     if not name:
-        # cwd was '/' or similar
         return "/"
     if name == os.path.basename(os.path.expanduser("~")):
         return "~"
     return name
+
+
+def session_title(transcript_path: str) -> str:
+    """Return the first real user prompt as a human-readable session
+    name.  Claude Code itself doesn't assign session titles, but
+    history.jsonl effectively uses the first prompt as the row's
+    display value, so this matches the same mental model."""
+    if not transcript_path or not os.path.exists(transcript_path):
+        return ""
+    try:
+        with open(transcript_path) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                if d.get("type") != "user":
+                    continue
+                msg = d.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                content = msg.get("content")
+                # User messages: either plain string, or a list of blocks.
+                # Skip tool_result-only messages (those are internal echoes
+                # back from the assistant's tool calls; not what the user
+                # actually typed).
+                text = ""
+                if isinstance(content, str):
+                    text = content
+                elif isinstance(content, list):
+                    for c in content:
+                        if isinstance(c, dict) and c.get("type") == "text":
+                            text = c.get("text", "")
+                            if text.strip():
+                                break
+                    else:
+                        continue
+                text = text.strip()
+                if not text:
+                    continue
+                # First newline-delimited line, no leading whitespace
+                first_line = text.splitlines()[0].strip()
+                return first_line
+    except Exception:
+        pass
+    return ""
 
 
 def main():
@@ -120,11 +165,18 @@ def main():
     except Exception:
         pass
 
-    # Headline: which project just finished + how many tokens this turn.
-    # data.h caps msg at 23 chars; project name truncated to fit.
-    proj = project_label(event.get("cwd", ""))[:14]
+    # Headline: short label for *this* session + how many tokens just ran.
+    # Prefer the first user prompt (matches how the user thinks about
+    # their session); fall back to cwd basename when the transcript is
+    # gone or has no usable user text yet.
+    title = session_title(transcript)
+    if not title:
+        title = project_label(event.get("cwd", ""))
+    # data.h caps msg at 23 chars total; "done " (5) + " " (1) + " 1.2K" (5)
+    # leaves room for ~12 chars of title.
     tok = fmt_tokens(sess_out)
-    msg = f"done {proj} {tok}"[:23]
+    short = title[:12]
+    msg = f"done {short} {tok}"[:23]
 
     body = {
         "tokens_today": today_out_all,
