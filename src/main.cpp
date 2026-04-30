@@ -57,10 +57,13 @@ uint8_t msgScroll = 0;
 uint16_t lastLineGen = 0;
 char     lastPromptId[40] = "";
 uint32_t lastInteractMs = 0;
-// Completion banner — populated on rising edge of tama.recentlyCompleted,
-// rendered as an overlay over PET/INFO/menu/normal pages for 3 s.
+// Completion banner — populated on rising edge of tama.recentlyCompleted.
+// Full-screen overlay that shows the per-session "done <X>" headline for
+// 30 s or until the user dismisses it by pressing A.  A new completion
+// replaces the current banner.
 uint32_t completionBannerUntil = 0;
-char     completionBannerMsg[24] = "";
+char     completionBannerMsg[48] = "";
+const uint32_t COMPLETION_BANNER_MS = 30000;
 bool     dimmed = false;
 bool     screenOff = false;
 bool     swallowBtnA = false;
@@ -1168,7 +1171,7 @@ void loop() {
       triggerOneShot(P_CELEBRATE, 3000);
       strncpy(completionBannerMsg, tama.msg, sizeof(completionBannerMsg) - 1);
       completionBannerMsg[sizeof(completionBannerMsg) - 1] = 0;
-      completionBannerUntil = millis() + 3000;
+      completionBannerUntil = millis() + COMPLETION_BANNER_MS;
       _lastFiredHash = msgHash;
       _lastFireMs = millis();
     }
@@ -1258,6 +1261,19 @@ void loop() {
   }
   if (M5.BtnA.wasReleased()) {
     if (!btnALong && !swallowBtnA) {
+      // Banner takes priority over every other A action: a quick A tap
+      // when the green DONE overlay is up just dismisses it. We don't
+      // approve a prompt, cycle screens, etc. on that same press.
+      bool bannerActive = (int32_t)(millis() - completionBannerUntil) < 0
+                          && completionBannerMsg[0];
+      if (bannerActive) {
+        completionBannerUntil = 0;
+        completionBannerMsg[0] = 0;
+        beep(1600, 30);
+        btnALong = false;
+        swallowBtnA = false;
+        return;
+      }
       if (inPrompt) {
         char cmd[96];
         snprintf(cmd, sizeof(cmd), "{\"cmd\":\"permission\",\"id\":\"%s\",\"decision\":\"once\"}", tama.promptId);
@@ -1408,26 +1424,39 @@ void loop() {
     if (resetOpen) drawReset();
     else if (settingsOpen) drawSettings();
     else if (menuOpen) drawMenu();
-    // Completion banner — draws on top of whatever page is active so the
-    // user sees the per-session "done <name> <Ntk>" headline even while
-    // staring at PET/INFO. Lasts 3 s after the rising edge fires above.
+    // Completion banner — full-screen overlay on top of whatever page is
+    // active.  Lasts 30s after rising edge unless the user dismisses
+    // with A or a new completion replaces it.  Pure ASCII rendering
+    // (msg should be ASCII-only from the bridge); no efont/CJK setup
+    // needed.  Big "DONE" header + msg + dismiss hint.
     if ((int32_t)(millis() - completionBannerUntil) < 0
         && completionBannerMsg[0]) {
-      const Palette& p = characterPalette();
-      const int BAR_H = 38;
-      const int BAR_Y = (H - BAR_H) / 2;
-      spr.fillRect(0, BAR_Y, W, BAR_H, GREEN);
-      spr.drawFastHLine(0, BAR_Y, W, p.text);
-      spr.drawFastHLine(0, BAR_Y + BAR_H - 1, W, p.text);
-      int len = strlen(completionBannerMsg);
-      int sz = 2;
-      if (len * 12 > W - 8) sz = 1;
-      spr.setTextSize(sz);
+      spr.fillRect(0, 0, W, H, GREEN);
       spr.setTextColor(0x0000, GREEN);
-      int tw = len * 6 * sz;
-      spr.setCursor((W - tw) / 2, BAR_Y + (BAR_H - 8 * sz) / 2);
-      spr.print(completionBannerMsg);
+      spr.setTextDatum(MC_DATUM);
+
+      // Big "DONE" header
+      spr.setTextSize(5);
+      spr.drawString("DONE", W / 2, 50);
+
+      // Decorative divider
+      spr.drawFastHLine(20, 90, W - 40, 0x0000);
+
+      // Message — auto-fit size 3 → 2 → 1 based on length
+      int len = strlen(completionBannerMsg);
+      int sz = 3;
+      if (len * 18 > W - 16) sz = 2;
+      if (len * 12 > W - 8)  sz = 1;
+      spr.setTextSize(sz);
+      // Center vertically in the middle band
+      spr.drawString(completionBannerMsg, W / 2, H / 2 + 10);
+
+      // "A to dismiss" footer
       spr.setTextSize(1);
+      spr.setTextColor(0x0000, GREEN);
+      spr.drawString("press A to dismiss", W / 2, H - 18);
+
+      spr.setTextDatum(TL_DATUM);
     }
     spr.pushSprite(0, 0);
   }

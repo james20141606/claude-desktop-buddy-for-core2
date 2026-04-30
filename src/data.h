@@ -12,7 +12,9 @@ struct TamaState {
   uint32_t tokensToday;
   uint32_t tokensTotal;          // bridge-pushed all-time output, display only
   uint32_t lastUpdated;
-  char     msg[24];
+  char     msg[48];        // bumped 24→48 so the completion banner can
+                           // hold "done {project} {sid4} {tokens}" plus
+                           // future labels comfortably
   bool     connected;
   char     lines[8][92];
   uint8_t  nLines;
@@ -186,6 +188,7 @@ inline void dataPoll(TamaState* out) {
   if (!out->connected) {
     out->sessionsTotal=0; out->sessionsRunning=0; out->sessionsWaiting=0;
     out->recentlyCompleted=false; out->lastUpdated=now;
+    // sizeof(out->msg) - 1 still works regardless of buffer size change
     strncpy(out->msg, "No Claude", sizeof(out->msg)-1);
     out->msg[sizeof(out->msg)-1]=0;
   }

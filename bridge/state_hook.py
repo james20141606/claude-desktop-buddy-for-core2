@@ -165,18 +165,23 @@ def main():
     except Exception:
         pass
 
-    # Headline: short label for *this* session + how many tokens just ran.
-    # Prefer the first user prompt (matches how the user thinks about
-    # their session); fall back to cwd basename when the transcript is
-    # gone or has no usable user text yet.
-    title = session_title(transcript)
-    if not title:
-        title = project_label(event.get("cwd", ""))
-    # data.h caps msg at 23 chars total; "done " (5) + " " (1) + " 1.2K" (5)
-    # leaves room for ~12 chars of title.
+    # Headline content for the firmware's full-screen completion banner.
+    # The buddy renders this with the basic ASCII font (no CJK glyphs),
+    # so we strip non-ASCII to avoid box/garbage characters.  Format:
+    #
+    #   "<project> <sid4> <tokens>"
+    #
+    # where <project> is the cwd basename, <sid4> is the first 4 hex
+    # chars of the session_id (so multiple concurrent sessions in the
+    # same project still distinguish), and <tokens> is the formatted
+    # output count (e.g. 1.4M).
+    cwd = event.get("cwd", "")
+    proj_full = project_label(cwd)
+    proj_ascii = "".join(c for c in proj_full if c.isascii() and c != " ")
+    proj_ascii = proj_ascii[:14] or "?"
+    sid4 = (event.get("session_id") or "")[:4] or "----"
     tok = fmt_tokens(sess_out)
-    short = title[:12]
-    msg = f"done {short} {tok}"[:23]
+    msg = f"{proj_ascii} {sid4} {tok}"[:46]
 
     body = {
         "tokens_today": today_out_all,
