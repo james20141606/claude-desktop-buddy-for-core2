@@ -1525,15 +1525,13 @@ void loop() {
       }
 
       // ── Body — render each \n-delimited line using efontCN_16 so
-      // Chinese (and other UTF-8) glyphs render instead of garbage.
-      // efontCN_16 is 16 px tall, accepts UTF-8 input, falls back to
-      // a tofu-square only for unsupported codepoints.  Tradeoff vs
-      // the default font: each char is a fixed 16 px wide which means
-      // wrapping arithmetic is simpler — count chars (UTF-8 code
-      // points), not pixel widths.
+      // CJK glyphs render. Wraps by walking UTF-8 codepoints and
+      // checking textWidth() so mixed ASCII+CJK text breaks at the
+      // right pixel column regardless of how many bytes per glyph.
       spr.setTextDatum(MC_DATUM);
       spr.setFont(&fonts::efontCN_16);
       spr.setTextSize(1);
+      const int MAX_LINE_PX = W - 20;   // 220 px usable
       int y = 96;
       const char* p = completionBannerText;
       uint8_t lineIdx = 0;
@@ -1545,24 +1543,49 @@ void loop() {
         memcpy(line, p, lineLen);
         line[lineLen] = 0;
 
-        if (lineIdx == 0) {
-          spr.setTextColor(0x07FF, 0x0000);   // header in cyan
-        } else {
-          spr.setTextColor(0xFFFF, 0x0000);   // body in white
-        }
+        spr.setTextColor(lineIdx == 0 ? 0x07FF : 0xFFFF, 0x0000);
 
-        // M5GFX's drawString does its own automatic wrapping when the
-        // string is wider than the screen ONLY if textWrap is set.
-        // We let it draw the raw line and rely on the chunking we
-        // already do for ASCII when needed; for Chinese, one line
-        // typically fits in 14 characters at 16 px each (224 px).
-        spr.drawString(line, W / 2, y + 8);
-        y += (lineIdx == 0) ? 22 : 20;
+        // UTF-8-aware greedy wrap by pixel width
+        char chunk[160];
+        int ci = 0;
+        const char* w = line;
+        while (*w && y < H - 30) {
+          // Decode UTF-8 codepoint length
+          unsigned char b0 = (unsigned char)*w;
+          int cplen = 1;
+          if      ((b0 & 0xE0) == 0xC0) cplen = 2;
+          else if ((b0 & 0xF0) == 0xE0) cplen = 3;
+          else if ((b0 & 0xF8) == 0xF0) cplen = 4;
+          if (ci + cplen + 1 >= (int)sizeof(chunk)) break;
+
+          // Tentatively append this codepoint and measure
+          memcpy(chunk + ci, w, cplen);
+          chunk[ci + cplen] = 0;
+          if (spr.textWidth(chunk) > MAX_LINE_PX && ci > 0) {
+            // Overshot — flush the previous chunk and restart with
+            // this codepoint on a fresh line.
+            chunk[ci] = 0;
+            spr.drawString(chunk, W / 2, y + 8);
+            y += 20;
+            // Restart chunk
+            memcpy(chunk, w, cplen);
+            chunk[cplen] = 0;
+            ci = cplen;
+          } else {
+            ci += cplen;
+          }
+          w += cplen;
+        }
+        if (ci > 0 && y < H - 30) {
+          chunk[ci] = 0;
+          spr.drawString(chunk, W / 2, y + 8);
+          y += (lineIdx == 0) ? 22 : 20;
+        }
 
         p = end ? end + 1 : p + lineLen;
         lineIdx++;
       }
-      // Restore default font for everything else (footer + later draws)
+      // Restore default font for footer + later UI draws
       spr.setFont(&fonts::Font0);
 
       // ── Footer with countdown (dim cyan)
