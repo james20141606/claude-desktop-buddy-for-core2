@@ -233,9 +233,16 @@ def main():
     # Brief summary line.  Prefer the user's most recent prompt — it's
     # short, focused, and describes the task — over the assistant's
     # response (which is long, multilingual, and full of code fences
-    # and ASCII art that don't survive an ASCII filter).  Fall back to
-    # the assistant message if there's no usable user prompt.
+    # and ASCII art that don't survive an ASCII filter).
+    #
+    # By default we strip non-ASCII so the firmware's default font
+    # renders cleanly.  Set BUDDY_LANG=cn (or any value other than the
+    # default "en") to keep CJK characters intact — the firmware uses
+    # efontCN_16 for the banner body and renders UTF-8.
     import re
+    BUDDY_LANG = os.environ.get("BUDDY_LANG", "en").lower()
+    KEEP_CJK = BUDDY_LANG != "en"
+
     def _ascii_clean(text: str) -> str:
         # Drop code fences and inline backticks
         s = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
@@ -244,14 +251,20 @@ def main():
         s = re.sub(r"^[\s>|]+", " ", s, flags=re.MULTILINE)
         for marker in ("**", "##", "#", ">", "*", "•", "—", "─", "│", "═"):
             s = s.replace(marker, "")
-        s = "".join(c for c in s if c.isascii() and c.isprintable())
+        if KEEP_CJK:
+            # Keep printable Unicode (incl. CJK).  Drop control/zero-width.
+            s = "".join(c for c in s if c.isprintable() or c in " \t")
+        else:
+            s = "".join(c for c in s if c.isascii() and c.isprintable())
         return " ".join(s.split()).strip()
 
     def _looks_meaningful(s: str) -> bool:
-        # An ASCII-only summary is "meaningful" if it has at least 12
-        # chars AND contains at least one space (real sentences) AND
-        # has at least one lowercase letter (filters "DONEDONE"-style
-        # brand fragments leaked from CJK text).
+        # In CJK mode, any non-empty string with ≥4 chars is meaningful —
+        # even a 4-character Chinese sentence carries info.
+        # In ASCII mode, require ≥12 chars + a space + a lowercase letter
+        # (filters "DONEDONE"-style brand fragments leaked from CJK text).
+        if KEEP_CJK:
+            return len(s) >= 4
         return (len(s) >= 12 and " " in s
                 and any(c.islower() for c in s))
 
@@ -268,7 +281,7 @@ def main():
     # Stats line shows THIS TURN's output tokens (what just happened),
     # not session total which can be many millions on a long convo.
     tok = fmt_tokens(last_turn_out)
-    stats = f"{tok} this turn / {sess_n}msg total"
+    stats = f"{tok} this turn"
 
     banner_text = f"{header}\n{summary}\n{stats}"
     msg = f"{proj_ascii} {sid4} {tok}"[:46]

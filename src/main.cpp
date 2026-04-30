@@ -1469,26 +1469,7 @@ void loop() {
         }
       }
 
-      // ── Confetti (32 particles, falling)
-      if (!bannerConfettiInit) {
-        for (int i = 0; i < 32; i++) {
-          bannerConfetti[i].x  = (int16_t)random(W - 4) + 2;
-          bannerConfetti[i].y  = (int16_t)random(H);
-          bannerConfetti[i].dy = (int8_t)(1 + random(3));   // 1..3 px/frame
-          bannerConfetti[i].hue = (uint8_t)random(8);
-        }
-        bannerConfettiInit = true;
-      }
-      for (int i = 0; i < 32; i++) {
-        bannerConfetti[i].y += bannerConfetti[i].dy;
-        if (bannerConfetti[i].y >= H - 4) {
-          bannerConfetti[i].y = 4;
-          bannerConfetti[i].x = (int16_t)random(W - 8) + 4;
-          bannerConfetti[i].hue = (uint8_t)random(8);
-        }
-        spr.fillCircle(bannerConfetti[i].x, bannerConfetti[i].y, 2,
-                       bannerHues[bannerConfetti[i].hue & 7]);
-      }
+      // (Confetti removed per user request — was too "snowing")
 
       // ── Star-burst behind the DONE+cat header (first ~600 ms)
       if (age < 600) {
@@ -1543,60 +1524,46 @@ void loop() {
         spr.drawPixel(xi, 72 + yo, 0xFFE0);
       }
 
-      // ── Body — render each \n-delimited line.
+      // ── Body — render each \n-delimited line using efontCN_16 so
+      // Chinese (and other UTF-8) glyphs render instead of garbage.
+      // efontCN_16 is 16 px tall, accepts UTF-8 input, falls back to
+      // a tofu-square only for unsupported codepoints.  Tradeoff vs
+      // the default font: each char is a fixed 16 px wide which means
+      // wrapping arithmetic is simpler — count chars (UTF-8 code
+      // points), not pixel widths.
       spr.setTextDatum(MC_DATUM);
-      spr.setTextColor(0xFFFF, 0x0000);
+      spr.setFont(&fonts::efontCN_16);
+      spr.setTextSize(1);
       int y = 96;
       const char* p = completionBannerText;
       uint8_t lineIdx = 0;
       while (*p && y < H - 30) {
         const char* end = strchr(p, '\n');
         size_t lineLen = end ? (size_t)(end - p) : strlen(p);
-        char line[80];
+        char line[160];
         if (lineLen >= sizeof(line)) lineLen = sizeof(line) - 1;
         memcpy(line, p, lineLen);
         line[lineLen] = 0;
 
         if (lineIdx == 0) {
-          // Header line: size 2 in bright cyan
-          spr.setTextSize(2);
-          spr.setTextColor(0x07FF, 0x0000);
-          spr.drawString(line, W / 2, y + 8);
-          y += 24;
+          spr.setTextColor(0x07FF, 0x0000);   // header in cyan
         } else {
-          // Body lines: size 2 white with simple word wrap to ~19 chars
-          spr.setTextSize(2);
-          spr.setTextColor(0xFFFF, 0x0000);
-          char buf[20];
-          int bi = 0;
-          const char* w = line;
-          while (*w) {
-            while (*w == ' ') w++;
-            const char* ws = w;
-            while (*w && *w != ' ') w++;
-            size_t wlen = w - ws;
-            if (bi > 0 && bi + wlen + 1 > 19) {
-              buf[bi] = 0;
-              spr.drawString(buf, W / 2, y + 8);
-              y += 22;
-              bi = 0;
-              if (y > H - 50) break;
-            }
-            if (wlen >= 19) wlen = 18;
-            if (bi > 0) buf[bi++] = ' ';
-            memcpy(buf + bi, ws, wlen);
-            bi += wlen;
-          }
-          if (bi > 0 && y <= H - 50) {
-            buf[bi] = 0;
-            spr.drawString(buf, W / 2, y + 8);
-            y += 22;
-          }
+          spr.setTextColor(0xFFFF, 0x0000);   // body in white
         }
+
+        // M5GFX's drawString does its own automatic wrapping when the
+        // string is wider than the screen ONLY if textWrap is set.
+        // We let it draw the raw line and rely on the chunking we
+        // already do for ASCII when needed; for Chinese, one line
+        // typically fits in 14 characters at 16 px each (224 px).
+        spr.drawString(line, W / 2, y + 8);
+        y += (lineIdx == 0) ? 22 : 20;
 
         p = end ? end + 1 : p + lineLen;
         lineIdx++;
       }
+      // Restore default font for everything else (footer + later draws)
+      spr.setFont(&fonts::Font0);
 
       // ── Footer with countdown (dim cyan)
       spr.setTextSize(1);
