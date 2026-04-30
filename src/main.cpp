@@ -1453,20 +1453,18 @@ void loop() {
       uint32_t age = millis() - bannerStartedMs;
       uint16_t tick = (uint16_t)(age / 32);   // ~30 fps animation phase
 
-      // ── Border: steady gold most of the time, brief 250 ms rainbow
-      // pulse every 5 s.  Continuous cycling was too distracting; this
-      // way the banner reads quietly with a subtle "still alive" flash.
-      uint32_t cyclePos = age % 5000;
-      bool inFlash = cyclePos < 250;
-      if (inFlash) {
-        for (int b = 0; b < 4; b++) {
-          uint16_t c = bannerHues[((cyclePos / 30) + b) & 7];
-          spr.drawRect(b, b, W - 2 * b, H - 2 * b, c);
-        }
-      } else {
-        for (int b = 0; b < 4; b++) {
-          spr.drawRect(b, b, W - 2 * b, H - 2 * b, 0xFFE0);   // gold
-        }
+      // ── Border: fixed 4 px gradient frame, no animation.
+      // Layered concentric rings from gold (outer) to cyan (inner) —
+      // matches the DONE letter colour on the outside and the body
+      // text colour on the inside, so it ties everything together.
+      static const uint16_t borderRings[4] = {
+        0xFFE0,   // gold
+        0xFD20,   // orange
+        0xF81F,   // magenta
+        0x07FF,   // cyan
+      };
+      for (int b = 0; b < 4; b++) {
+        spr.drawRect(b, b, W - 2 * b, H - 2 * b, borderRings[b]);
       }
 
       // (Confetti removed per user request — was too "snowing")
