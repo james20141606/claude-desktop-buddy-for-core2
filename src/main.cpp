@@ -1453,10 +1453,20 @@ void loop() {
       uint32_t age = millis() - bannerStartedMs;
       uint16_t tick = (uint16_t)(age / 32);   // ~30 fps animation phase
 
-      // ── Rainbow border (4 concentric rings, hue rotates per tick)
-      for (int b = 0; b < 4; b++) {
-        uint16_t c = bannerHues[(tick / 3 + b) & 7];
-        spr.drawRect(b, b, W - 2 * b, H - 2 * b, c);
+      // ── Border: steady gold most of the time, brief 250 ms rainbow
+      // pulse every 5 s.  Continuous cycling was too distracting; this
+      // way the banner reads quietly with a subtle "still alive" flash.
+      uint32_t cyclePos = age % 5000;
+      bool inFlash = cyclePos < 250;
+      if (inFlash) {
+        for (int b = 0; b < 4; b++) {
+          uint16_t c = bannerHues[((cyclePos / 30) + b) & 7];
+          spr.drawRect(b, b, W - 2 * b, H - 2 * b, c);
+        }
+      } else {
+        for (int b = 0; b < 4; b++) {
+          spr.drawRect(b, b, W - 2 * b, H - 2 * b, 0xFFE0);   // gold
+        }
       }
 
       // ── Confetti (32 particles, falling)

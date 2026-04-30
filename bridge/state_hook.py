@@ -32,15 +32,44 @@ PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 LOCAL_TZ = datetime.now(timezone.utc).astimezone().tzinfo
 
 
-def tally(path: str, today_str: str) -> tuple[int, int, int, int]:
-    """Returns (session_output, today_output, all_time_output, n_assistant_msgs)."""
+def tally(path: str, today_str: str) -> tuple[int, int, int, int, int]:
+    """Returns (session_output, today_output, all_time_output,
+                 n_assistant_msgs, last_turn_output).
+
+    last_turn_output is the sum of output_tokens for assistant
+    messages emitted after the most recent "user" entry in the
+    transcript — i.e. just what the assistant produced in the turn
+    that just ended.  That's typically what the user means by
+    "tokens this turn" instead of the much larger session total."""
     sess_out = today_out = all_out = n = 0
+    last_turn_out = 0
     try:
         with open(path) as f:
             for line in f:
                 try:
                     d = json.loads(line)
                 except Exception:
+                    continue
+                t = d.get("type")
+                if t == "user":
+                    # Only reset for REAL user prompts, not tool_result
+                    # echoes back from the assistant's tool calls (which
+                    # also have type=user).  Real prompts contain a
+                    # text content block; tool results don't.
+                    msg = d.get("message")
+                    is_real_prompt = False
+                    if isinstance(msg, dict):
+                        c = msg.get("content")
+                        if isinstance(c, str) and c.strip():
+                            is_real_prompt = True
+                        elif isinstance(c, list):
+                            for blk in c:
+                                if isinstance(blk, dict) and blk.get("type") == "text":
+                                    if blk.get("text", "").strip():
+                                        is_real_prompt = True
+                                        break
+                    if is_real_prompt:
+                        last_turn_out = 0
                     continue
                 msg = d.get("message")
                 if not isinstance(msg, dict) or "usage" not in msg:
@@ -49,6 +78,7 @@ def tally(path: str, today_str: str) -> tuple[int, int, int, int]:
                 tok = u.get("output_tokens", 0)
                 sess_out += tok
                 all_out += tok
+                last_turn_out += tok
                 n += 1
                 ts = d.get("timestamp", "")
                 if ts.startswith(today_str):
@@ -57,7 +87,7 @@ def tally(path: str, today_str: str) -> tuple[int, int, int, int]:
         pass
     except Exception:
         pass
-    return sess_out, today_out, all_out, n
+    return sess_out, today_out, all_out, n, last_turn_out
 
 
 def fmt_tokens(n: int) -> str:
@@ -82,13 +112,12 @@ def project_label(cwd: str) -> str:
     return name
 
 
-def session_title(transcript_path: str) -> str:
-    """Return the first real user prompt as a human-readable session
-    name.  Claude Code itself doesn't assign session titles, but
-    history.jsonl effectively uses the first prompt as the row's
-    display value, so this matches the same mental model."""
+def _user_prompts(transcript_path: str):
+    """Yield user-typed prompt strings from the transcript in order.
+    Skips tool_result-only "user" messages (those are internal echoes
+    back from assistant tool calls, not what the user actually typed)."""
     if not transcript_path or not os.path.exists(transcript_path):
-        return ""
+        return
     try:
         with open(transcript_path) as f:
             for line in f:
@@ -102,30 +131,40 @@ def session_title(transcript_path: str) -> str:
                 if not isinstance(msg, dict):
                     continue
                 content = msg.get("content")
-                # User messages: either plain string, or a list of blocks.
-                # Skip tool_result-only messages (those are internal echoes
-                # back from the assistant's tool calls; not what the user
-                # actually typed).
                 text = ""
                 if isinstance(content, str):
                     text = content
                 elif isinstance(content, list):
                     for c in content:
                         if isinstance(c, dict) and c.get("type") == "text":
-                            text = c.get("text", "")
-                            if text.strip():
+                            t = c.get("text", "")
+                            if t.strip():
+                                text = t
                                 break
                     else:
                         continue
                 text = text.strip()
-                if not text:
-                    continue
-                # First newline-delimited line, no leading whitespace
-                first_line = text.splitlines()[0].strip()
-                return first_line
+                if text:
+                    yield text
     except Exception:
-        pass
+        return
+
+
+def session_title(transcript_path: str) -> str:
+    """First real user prompt of the session — used as a session label."""
+    for text in _user_prompts(transcript_path):
+        return text.splitlines()[0].strip()
     return ""
+
+
+def last_user_prompt(transcript_path: str) -> str:
+    """Most recent user-typed prompt — what the assistant just finished
+    answering.  Cleaner subject for the banner summary than the raw
+    assistant response (which is often long, multilingual, code-fenced)."""
+    last = ""
+    for text in _user_prompts(transcript_path):
+        last = text
+    return last.splitlines()[0].strip() if last else ""
 
 
 def main():
@@ -149,9 +188,9 @@ def main():
 
     # Current session breakdown
     transcript = event.get("transcript_path")
-    sess_out = sess_n = 0
+    sess_out = sess_n = last_turn_out = 0
     if transcript:
-        sess_out, _, _, sess_n = tally(transcript, today_str)
+        sess_out, _, _, sess_n, last_turn_out = tally(transcript, today_str)
 
     # Today + all-time output across every Claude Code project on disk.
     # One pass, two accumulators; cheap even with hundreds of JSONLs.
@@ -159,7 +198,7 @@ def main():
     all_out_all = 0
     try:
         for f in glob.glob(os.path.join(PROJECTS_DIR, "*", "*.jsonl")):
-            _, t, a, _ = tally(f, today_str)
+            _, t, a, _, _ = tally(f, today_str)
             today_out_all += t
             all_out_all += a
     except Exception:
@@ -191,35 +230,45 @@ def main():
 
     header = f"{location}: {proj_ascii} {sid4}"
 
-    # Brief summary of what the assistant just said.  We have to be a
-    # little surgical here because last_assistant_message includes the
-    # full markdown body — code fences, ASCII tables, the works.  If
-    # we just strip non-ASCII the banner ends up showing the box-drawn
-    # banner ASCII art the assistant drew in the message, complete
-    # with its own "DONE" letters duplicated everywhere.
-    last = event.get("last_assistant_message") or ""
-
-    # 1. Drop code-fenced sections (```...``` and ~~~...~~~) since
-    #    they're usually code, command output, or ASCII art.
+    # Brief summary line.  Prefer the user's most recent prompt — it's
+    # short, focused, and describes the task — over the assistant's
+    # response (which is long, multilingual, and full of code fences
+    # and ASCII art that don't survive an ASCII filter).  Fall back to
+    # the assistant message if there's no usable user prompt.
     import re
-    s = re.sub(r"```.*?```", " ", last, flags=re.DOTALL)
-    s = re.sub(r"~~~.*?~~~", " ", s,    flags=re.DOTALL)
-    # 2. Drop inline backtick spans (short code references)
-    s = re.sub(r"`[^`]*`", " ", s)
-    # 3. Drop block-quote prefixes and table separators
-    s = re.sub(r"^[\s>|]+", " ", s, flags=re.MULTILINE)
-    # 4. Strip headings (# / ##) and emphasis markers
-    for marker in ("**", "##", "#", ">", "*", "•", "—", "─", "│", "═"):
-        s = s.replace(marker, "")
-    # 5. Collapse whitespace
-    s = " ".join(s.split())
-    # 6. ASCII only
-    s = "".join(c for c in s if c.isascii() and c.isprintable())
-    s = " ".join(s.split())
-    summary = s.strip()[:80] or "(silent turn)"
+    def _ascii_clean(text: str) -> str:
+        # Drop code fences and inline backticks
+        s = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
+        s = re.sub(r"~~~.*?~~~", " ", s,    flags=re.DOTALL)
+        s = re.sub(r"`[^`]*`", " ", s)
+        s = re.sub(r"^[\s>|]+", " ", s, flags=re.MULTILINE)
+        for marker in ("**", "##", "#", ">", "*", "•", "—", "─", "│", "═"):
+            s = s.replace(marker, "")
+        s = "".join(c for c in s if c.isascii() and c.isprintable())
+        return " ".join(s.split()).strip()
 
-    tok = fmt_tokens(sess_out)
-    stats = f"{tok} tokens / {sess_n}msg"
+    def _looks_meaningful(s: str) -> bool:
+        # An ASCII-only summary is "meaningful" if it has at least 12
+        # chars AND contains at least one space (real sentences) AND
+        # has at least one lowercase letter (filters "DONEDONE"-style
+        # brand fragments leaked from CJK text).
+        return (len(s) >= 12 and " " in s
+                and any(c.islower() for c in s))
+
+    user_prompt = last_user_prompt(transcript)
+    summary = _ascii_clean(user_prompt)
+    if not _looks_meaningful(summary):
+        alt = _ascii_clean(event.get("last_assistant_message") or "")
+        if _looks_meaningful(alt):
+            summary = alt
+    if not _looks_meaningful(summary):
+        summary = f"finished turn {sess_n} in this session"
+    summary = summary[:80]
+
+    # Stats line shows THIS TURN's output tokens (what just happened),
+    # not session total which can be many millions on a long convo.
+    tok = fmt_tokens(last_turn_out)
+    stats = f"{tok} this turn / {sess_n}msg total"
 
     banner_text = f"{header}\n{summary}\n{stats}"
     msg = f"{proj_ascii} {sid4} {tok}"[:46]
