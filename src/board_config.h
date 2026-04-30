@@ -49,20 +49,24 @@
   #define CLOCK_DT_Y            240
   #define CLOCK_TEMP_Y          270
 
-  // PET page typography.  Balanced sizing — upper visual rows
-  // (mood/fed/energy) at label size 1 with mid-sized markers; lower
-  // counters (approved/denied/...) at size 2 so the page reads top→
-  // bottom as light → heavy without one row dominating the other.
-  // PET_TOP=110 accounts for the scale-2 peek pet.
-  #define PET_HEADER_SZ         2
+  // PET page typography.  Everything at size 2 for visual consistency:
+  // labels (mood/fed/energy/MOOD/FED/...) and counters (approved/...)
+  // share one font size.  PET_TOP=95 because the header is now drawn
+  // beside the peek pet (PET_HEADER_INLINE=1), not above the stats.
+  #define PET_HEADER_SZ         1     // small inline header beside pet
+  #define PET_HEADER_INLINE     1     // 1=draw header right of peek pet
+  #define PEEK_X_OFFSET         (-40) // shift peek pet left to free right side
+  #define PEEK_CLEAR_W          160   // buddyTick fillRect width in peek mode
   #define PET_STAT_BODY_SZ      2
-  #define PET_STAT_LINE_H       14
-  #define PET_TOP               110
-  #define PET_LABEL_SZ          1
-  #define PET_HEART_R           3     // mid (was 4 too big, 2 too small)
+  #define PET_STAT_LINE_H       16
+  #define PET_TOP               95
+  #define PET_LABEL_SZ          2
+  #define PET_VISUAL_TOP_OFFSET 24
+  #define PET_ROW_STEP          26
+  #define PET_HEART_R           3
   #define PET_DOT_R             3
   #define PET_BAR_W             10
-  #define PET_BAR_H             7
+  #define PET_BAR_H             6
 
   // LED — Core2 has no GPIO indicator LED; use the AXP-driven green
   // side LED via M5.Power.setLed().
@@ -104,10 +108,15 @@
   #define CLOCK_TEMP_Y          220
 
   #define PET_HEADER_SZ         1
+  #define PET_HEADER_INLINE     0     // Plus has too narrow a screen
+  #define PEEK_X_OFFSET         0
+  #define PEEK_CLEAR_W          0     // unused when offset==0
   #define PET_STAT_BODY_SZ      1
   #define PET_STAT_LINE_H       10
   #define PET_TOP               70
   #define PET_LABEL_SZ          1
+  #define PET_VISUAL_TOP_OFFSET 16
+  #define PET_ROW_STEP          20
   #define PET_HEART_R           2
   #define PET_DOT_R             2
   #define PET_BAR_W             9

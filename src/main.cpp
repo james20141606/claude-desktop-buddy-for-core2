@@ -840,14 +840,10 @@ static void drawPetStats(const Palette& p) {
 
   // Visual rows (mood / fed / energy) at PET_LABEL_SZ. Sizes for the
   // hearts / dots / bars come from board_config so Core2 can have
-  // chunkier markers without breaking the StickC layout. Start a bit
-  // lower than the original 16px offset to give the bigger pet above
-  // the page some breathing room.
+  // chunkier markers without breaking the StickC layout.
   spr.setTextSize(PET_LABEL_SZ);
-  int y = TOP + (PET_LABEL_SZ == 2 ? 30 : 16);
-  // Step between the three rows scales with the visual marker size so
-  // the rows don't crowd each other when the markers grow.
-  const int ROW_STEP = (PET_LABEL_SZ == 2 ? 32 : 20);
+  int y = TOP + PET_VISUAL_TOP_OFFSET;
+  const int ROW_STEP = PET_ROW_STEP;
   // Where the markers begin horizontally — "energy" at size-2 is the
   // longest label (6 chars × 12 px) so push markers right of x=80.
   const int MARK_X = (PET_LABEL_SZ == 2 ? 90 : 54);
@@ -912,31 +908,29 @@ static void drawPetStats(const Palette& p) {
 }
 
 // Page 1 = mechanics (MOOD/FED/ENERGY), page 2 = controls.
-// Inverted hierarchy: orange section labels stay small (size 1) so the
-// white body bullets at size 2 carry the visual weight — matches the
-// rebalance on page 0 where mood/fed/energy labels are also size 1.
+// All text at PET_STAT_BODY_SZ for consistency with page 0's stats.
 static void drawPetHowTo(const Palette& p, uint8_t subPage) {
   const int TOP = PET_TOP;
   spr.fillRect(0, TOP, W, H - TOP, p.bg);
-  // Skip past the PET header (drawn AFTER this function returns) by
-  // reserving header_height + gap.
-  int y = TOP + 2 + PET_HEADER_SZ * 8 + 6;
-  // Body bullet at size 2 — the readable explanation text.
+  // Header is drawn separately — inline beside the pet on Core2, or
+  // above the content on Plus. Skip past Plus's stacked header here.
+  int y = TOP + (PET_HEADER_INLINE ? 4 : (2 + PET_HEADER_SZ * 8 + 6));
+  const int BSZ = PET_STAT_BODY_SZ;
+  const int LH  = (BSZ == 2) ? 18 : 11;
   auto bullet = [&](uint16_t c, const char* s) {
-    spr.setTextSize(2);
-    spr.setTextColor(c, p.bg); spr.setCursor(6, y); spr.print(s); y += 18;
+    spr.setTextSize(BSZ);
+    spr.setTextColor(c, p.bg); spr.setCursor(6, y); spr.print(s); y += LH;
   };
-  // Small orange section label — visual cue, not the focus.
   auto label = [&](const char* s) {
-    spr.setTextSize(1);
-    spr.setTextColor(p.body, p.bg); spr.setCursor(6, y); spr.print(s); y += 11;
+    spr.setTextSize(BSZ);
+    spr.setTextColor(p.body, p.bg); spr.setCursor(6, y); spr.print(s); y += LH;
   };
   auto gap = [&]() { y += 6; };
 
   if (subPage == 0) {
     label("MOOD");
-    bullet(p.textDim, " approve fast = up");
-    bullet(p.textDim, " deny lots = down"); gap();
+    bullet(p.textDim, " approve = up");
+    bullet(p.textDim, " deny = down"); gap();
 
     label("FED");
     bullet(p.textDim, " 50K tokens lvl up");
@@ -966,10 +960,17 @@ void drawPet() {
   else if (petPage == 1) drawPetHowTo(p, 0);   // mechanics
   else                   drawPetHowTo(p, 1);   // controls
 
-  // Header on top of whichever page drew — title left, counter right
+  // Header layout: inline (beside pet, top-right) on Core2,
+  // or stacked above the content on Plus.
   spr.setTextSize(PET_HEADER_SZ);
   spr.setTextColor(p.text, p.bg);
+#if PET_HEADER_INLINE
+  // Pet shifted left by PEEK_X_OFFSET; right ~80px column free for header.
+  // x=160 starts the header; vertical center against the pet (y≈10..90).
+  spr.setCursor(160, 38);
+#else
   spr.setCursor(4, y + 2);
+#endif
   if (ownerName()[0]) {
     // English style: names ending in 's' take just an apostrophe
     // ("James' Luna"), not 's's ("James's Luna").
@@ -981,10 +982,14 @@ void drawPet() {
     spr.print(petName());
   }
   spr.setTextColor(p.textDim, p.bg);
-  // Right-align the page counter to fit at either text size.
+#if PET_HEADER_INLINE
+  spr.setCursor(160, 56);
+  spr.printf("%u/%u", petPage + 1, PET_PAGES);
+#else
   int ctrW = (PET_HEADER_SZ == 2) ? 36 : 28;
   spr.setCursor(W - ctrW, y + 2);
   spr.printf("%u/%u", petPage + 1, PET_PAGES);
+#endif
   spr.setTextSize(1);
 }
 

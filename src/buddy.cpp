@@ -39,6 +39,10 @@ static LovyanGFX* _tgt = &spr;
 // art is space-padded to a fixed width for alignment at 1×; at 2× we trim
 // and re-center per line so the padding doesn't push ink off-screen.
 static uint8_t _scale = 1;
+// Horizontal offset applied to all body+particle x-coords. Used in peek
+// mode (PET/INFO) to shift the pet left so a header can sit on the
+// right side. 0 in normal mode and on Plus.
+static int _xOffset = 0;
 
 void buddyPrintLine(const char* line, int yPx, uint16_t color, int xOff) {
   int len = strlen(line);
@@ -47,7 +51,7 @@ void buddyPrintLine(const char* line, int yPx, uint16_t color, int xOff) {
     while (len && *line == ' ')       { line++; len--; }
   }
   int w = len * BUDDY_CHAR_W * _scale;
-  int x = BUDDY_X_CENTER - w / 2 + xOff * _scale;
+  int x = BUDDY_X_CENTER + _xOffset - w / 2 + xOff * _scale;
   _tgt->setTextColor(color, BUDDY_BG);
   _tgt->setCursor(x, yPx);
   for (int i = 0; i < len; i++) _tgt->print(line[i]);
@@ -64,7 +68,7 @@ void buddyPrintSprite(const char* const* lines, uint8_t nLines, int yOffset, uin
 // Species pass 1× coords (relative to BUDDY_X_CENTER / BUDDY_Y_OVERLAY);
 // transform here so all 18 species files stay scale-agnostic.
 void buddySetCursor(int x, int y) {
-  _tgt->setCursor(BUDDY_X_CENTER + (x - BUDDY_X_CENTER) * _scale, y * _scale);
+  _tgt->setCursor(BUDDY_X_CENTER + _xOffset + (x - BUDDY_X_CENTER) * _scale, y * _scale);
 }
 void buddySetColor(uint16_t fg)   { _tgt->setTextColor(fg, BUDDY_BG); }
 void buddyPrint(const char* s)    { _tgt->setTextSize(_scale); _tgt->print(s); }
@@ -150,8 +154,10 @@ void buddyInvalidate() { lastDrawnState = 0xFF; }
 
 void buddySetPeek(bool peek) {
   uint8_t s = peek ? BUDDY_SCALE_PEEK : BUDDY_SCALE_NORMAL;
-  if (s == _scale) return;
+  int xOff = peek ? PEEK_X_OFFSET : 0;
+  if (s == _scale && xOff == _xOffset) return;
   _scale = s;
+  _xOffset = xOff;
   buddyInvalidate();
 }
 
@@ -189,8 +195,11 @@ void buddyTick(uint8_t personaState) {
   lastDrawnState = personaState;
   lastDrawnSpecies = currentSpeciesIdx;
 
-  // Clear the whole render strip — at 2× the body reaches y≈126, at 1× ≈82.
-  spr.fillRect(0, 0, BUDDY_CANVAS_W,
+  // Clear the body region. In peek mode with xOffset, narrow the clear so
+  // that whatever is drawn on the right side of the screen (the inline
+  // PET header on Core2) doesn't get erased every tick.
+  int clearW = (_xOffset != 0 && PEEK_CLEAR_W > 0) ? PEEK_CLEAR_W : BUDDY_CANVAS_W;
+  spr.fillRect(0, 0, clearW,
                (BUDDY_Y_BASE + 5 * BUDDY_CHAR_H + 12) * _scale, BUDDY_BG);
 
   const Species* sp = SPECIES_TABLE[currentSpeciesIdx];
