@@ -1513,20 +1513,19 @@ void loop() {
         spr.print(CAT[r]);
       }
 
-      // ── "DONE" at size 4 (was 5) on the RIGHT, beside the cat.
-      //    Each letter cycles through the 8-hue table.
+      // ── "DONE" at size 4 on the RIGHT, beside the cat.
+      //    Steady gold colour — no per-letter cycling — so the eye lands
+      //    on the word instead of being distracted by it pulsing.
+      //    The cycling is left to the border + confetti.
       spr.setTextSize(4);
+      spr.setTextColor(0xFFE0, 0x0000);
       const char* word = "DONE";
-      const int gW = 6 * 4;     // 24 px per glyph at size 4
+      const int gW = 6 * 4;
       int totalW = (int)strlen(word) * gW;
-      int xRight = 100 + (W - 100 - totalW) / 2;   // centered in the right half
+      int xRight = 100 + (W - 100 - totalW) / 2;
       if (xRight < 96) xRight = 96;
-      for (int i = 0; word[i]; i++) {
-        uint16_t c = bannerHues[(tick / 2 + i * 2) & 7];
-        spr.setTextColor(c, 0x0000);
-        spr.setCursor(xRight + i * gW, 28);
-        spr.write(word[i]);
-      }
+      spr.setCursor(xRight, 28);
+      spr.print(word);
 
       // ── Wavy divider below the DONE+cat header
       for (int xi = 16; xi < W - 16; xi++) {

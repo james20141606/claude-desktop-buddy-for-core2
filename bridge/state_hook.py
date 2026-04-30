@@ -191,12 +191,29 @@ def main():
 
     header = f"{location}: {proj_ascii} {sid4}"
 
-    # Brief summary of what the assistant just said.  Strip markdown
-    # markers / emojis / CJK so it renders cleanly on the size-2 font.
+    # Brief summary of what the assistant just said.  We have to be a
+    # little surgical here because last_assistant_message includes the
+    # full markdown body — code fences, ASCII tables, the works.  If
+    # we just strip non-ASCII the banner ends up showing the box-drawn
+    # banner ASCII art the assistant drew in the message, complete
+    # with its own "DONE" letters duplicated everywhere.
     last = event.get("last_assistant_message") or ""
-    s = last.replace("\n", " ").replace("\r", " ")
-    for tok in ("**", "##", "##", "`", ">", "*", "•", "—", "─"):
-        s = s.replace(tok, "")
+
+    # 1. Drop code-fenced sections (```...``` and ~~~...~~~) since
+    #    they're usually code, command output, or ASCII art.
+    import re
+    s = re.sub(r"```.*?```", " ", last, flags=re.DOTALL)
+    s = re.sub(r"~~~.*?~~~", " ", s,    flags=re.DOTALL)
+    # 2. Drop inline backtick spans (short code references)
+    s = re.sub(r"`[^`]*`", " ", s)
+    # 3. Drop block-quote prefixes and table separators
+    s = re.sub(r"^[\s>|]+", " ", s, flags=re.MULTILINE)
+    # 4. Strip headings (# / ##) and emphasis markers
+    for marker in ("**", "##", "#", ">", "*", "•", "—", "─", "│", "═"):
+        s = s.replace(marker, "")
+    # 5. Collapse whitespace
+    s = " ".join(s.split())
+    # 6. ASCII only
     s = "".join(c for c in s if c.isascii() and c.isprintable())
     s = " ".join(s.split())
     summary = s.strip()[:80] or "(silent turn)"
