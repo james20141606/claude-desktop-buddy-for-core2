@@ -278,12 +278,11 @@ def main():
         summary = f"finished turn {sess_n} in this session"
     summary = summary[:80]
 
-    # Stats line shows the SESSION's running total of output tokens.
-    # User wants the cumulative count for the conversation, not just
-    # what the assistant just said in this one turn — easier to gauge
-    # how much a session has spent overall.
+    # Stats line: just the cumulative session output-token count.
+    # User wants the headline number alone — banner real estate is
+    # better spent on the summary above it than on a verbose label.
     tok = fmt_tokens(sess_out)
-    stats = f"{tok} token this session"
+    stats = f"{tok} token"
 
     banner_text = f"{header}\n{summary}\n{stats}"
     msg = f"{proj_ascii} {sid4} {tok}"[:46]
