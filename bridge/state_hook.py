@@ -85,6 +85,13 @@ def project_label(cwd: str) -> str:
 
 def main():
     raw = sys.stdin.read()
+    # Debug: append every Stop event we receive so we can audit whether
+    # Claude Code is actually firing this hook (and what payload it sends).
+    try:
+        with open("/tmp/buddy-stop-events.log", "a") as f:
+            f.write(f"{datetime.now().isoformat()} {raw[:500]}\n")
+    except Exception:
+        pass
     try:
         event = json.loads(raw) if raw.strip() else {}
     except Exception:
