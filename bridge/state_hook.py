@@ -189,6 +189,17 @@ def main():
         "completed":    True,           # triggers the celebrate animation
     }
 
+    # Append the POST attempt + outcome to the event log so we can audit
+    # WHY the bridge call fails when fired by Claude Code (it works when
+    # invoked manually — env / cwd difference suspected).
+    def _logp(text: str):
+        try:
+            with open("/tmp/buddy-stop-events.log", "a") as f:
+                f.write(text + "\n")
+        except Exception:
+            pass
+
+    _logp(f"  posting to {BRIDGE_URL}: {json.dumps(body)[:200]}")
     try:
         req = urllib.request.Request(
             BRIDGE_URL,
@@ -196,10 +207,12 @@ def main():
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        urllib.request.urlopen(req, timeout=2).read()
-    except Exception:
-        # Bridge offline? Don't bother Claude Code about it.
-        pass
+        # 5s gives plenty of headroom for a localhost POST.  Claude Code's
+        # default hook timeout is generally 60s.
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            _logp(f"  POST -> {resp.status} {resp.read()[:120].decode(errors='replace')}")
+    except Exception as e:
+        _logp(f"  POST FAIL: {type(e).__name__}: {e!r}")
 
 
 if __name__ == "__main__":

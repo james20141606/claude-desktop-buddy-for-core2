@@ -28,7 +28,7 @@ pre = hooks.setdefault("PreToolUse", [])
 if not any("buddy_hook.py" in h.get("command", "")
            for e in pre for h in e.get("hooks", [])):
     pre.append({
-        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|WebFetch",
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|WebFetch|Read",
         "hooks": [{
             "type": "command",
             "command": f"python3 {home / 'buddy_hook.py'}",
