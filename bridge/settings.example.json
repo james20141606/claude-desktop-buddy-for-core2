@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/bytedance/buddy/bridge/buddy_hook.py"
+          }
+        ]
+      }
+    ]
+  }
+}

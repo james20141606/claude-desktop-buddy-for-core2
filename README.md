@@ -1,5 +1,14 @@
 # claude-desktop-buddy-for-core2
 
+> **Got Claude Code in a terminal (local or remote)?** See
+> [`bridge/`](bridge/) for a Python bridge that replaces Claude
+> Desktop's BLE role and lets `claude` CLI sessions on your Mac or any
+> SSH'd-into server route their `PreToolUse` permission prompts to the
+> Core2.  Press A on the device to allow, B to deny — works the same
+> over a `ssh -R` reverse tunnel.
+
+
+
 > **Core2 port** — this fork rewrites the firmware to run on the
 > **M5Stack Core2** (320×240 capacitive-touch ESP32 dev kit) instead of
 > the original M5StickC Plus. Same wire protocol, same desktop app
